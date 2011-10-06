@@ -1,0 +1,27 @@
+Mahalo - Mac Audio Hardware Abstraction Layer for OSX
+Brandon Lucia - 2011
+
+This is a simple library for building low-level audio projects on
+Mac OSX.  Included are two demonstrative uses of this software
+
+NoiserTest.cpp shows C one-liner style composition, a la 
+http://www.youtube.com/watch?v=qlrs2Vorw2Y
+
+WaveTest.cpp shows how to write sine wave generators and a 
+mixer that pushes samples to the audio hardware.
+
+The idea is to have a flexible, low-level, abstract way
+to access the audio hardware on a mac.  CoreAudio is big and
+complicated, so this prevents you from having to think about it
+if all you want to do is something little and experimental.
+
+Wave.* defines sine wave generators.
+Noiser.* defines C one-liner generators
+Mahalo.* is the actual abstraction layer that calls into CoreAudio
+SampleSource.h is the interface for a sampleSource, which is what Mahalo gets data from
+SampleMixer.* is a mixer that can take any number of SampleSources, mix them, and emit the mixed sample.
+tones.h is a big file containing #defines for a big list of piano key tones (if you want concordant stuff).
+
+Mixers can put data into mixers, so you can implement polyphony with disjoint sets of waves
+being mixed by independent mixers which then are mixed themselves before being sent to
+Mahalo.
