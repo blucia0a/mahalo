@@ -4,7 +4,10 @@
 #include <unistd.h>
 
 float fun(int t){
-  return (float)((t >> 6 | t | t >> (t>>16)) * 10 + ((t>>11)&7));
+  int val = (((t>>(t>>16)))*t) | (t>>7) ^ (t-1);
+  unsigned char vc = (unsigned char)val;
+  int retval = (int)vc;
+  return (float)retval;
 }
 
 int main(int argc, char *argv[]){
@@ -17,7 +20,9 @@ int main(int argc, char *argv[]){
   
   m->sstart();
 
-  usleep(5000000);
+
+  while(1); 
+
 
   m->sstop();
 }
