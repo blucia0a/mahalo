@@ -11,6 +11,6 @@
 
 class SampleSource{
 public:
-	virtual void getNextSample(float *out) = 0;
+  virtual void getNextSample(float *out) = 0;
 };
 #endif
