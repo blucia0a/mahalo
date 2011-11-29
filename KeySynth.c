@@ -62,10 +62,20 @@ CGEventRef keyPressed(
    CGEventRef event,
    void *refcon
 ){
-    int noteOn = 0x9 << 4;
-    int noteOff = 0x8 << 4;
-    int middleC = 0x3c;
-    int velocity;
+    AudioUnit *SynthUnit = (AudioUnit *)refcon;
+    
+    if((type == kCGEventMouseMoved)){  
+      CGPoint cursor = CGEventGetLocation(event);
+      float my = cursor.y;
+      float frac = my/900.; 
+      int newval = (int)((float)65535 * frac);
+      
+      fprintf(stderr,"%d\n",newval);
+
+      MusicDeviceMIDIEvent(*SynthUnit,  224, (newval & 0xFF), ( newval & 0xFF00 ) >> 8, 0);
+      return event;
+
+    }
 
     if ((type != kCGEventKeyDown) && (type != kCGEventKeyUp)){
         return event;
@@ -76,7 +86,6 @@ CGEventRef keyPressed(
                                        event, kCGKeyboardEventKeycode);
     int tone;
     int which = -1;
-    AudioUnit *SynthUnit = (AudioUnit *)refcon;
     switch(keycode){
 
       case kKeyboardAKey:
@@ -147,14 +156,6 @@ CGEventRef keyPressed(
         }
         fprintf(stderr,"Setting to voice %d\n",voice);
         MusicDeviceMIDIEvent(SynthUnit, 0xC0, voice, 0, 0);
-        MusicDeviceMIDIEvent(SynthUnit, 0xC0, voice, 0, 0);
-        MusicDeviceMIDIEvent(SynthUnit, 0xC0, voice, 0, 0);
-        MusicDeviceMIDIEvent(SynthUnit, 0xC0, voice, 0, 0);
-        MusicDeviceMIDIEvent(SynthUnit, 0xC0, voice, 0, 0);
-        MusicDeviceMIDIEvent(SynthUnit, 0xC0, voice, 0, 0);
-        MusicDeviceMIDIEvent(SynthUnit, 0xC0, voice, 0, 0);
-        MusicDeviceMIDIEvent(SynthUnit, 0xC0, voice, 0, 0);
-        MusicDeviceMIDIEvent(SynthUnit, 0xC0, voice, 0, 0);
       break;
       default:
       break; 
@@ -190,6 +191,7 @@ int main(int argc, char *argv[])
 
   NewAUGraph(&AudioGraph);
 
+  /*Output Node*/
   AudioComponentDescription cd;
   AUNode OutputNode;
   AudioUnit OutputUnit;
@@ -203,9 +205,9 @@ int main(int argc, char *argv[])
   AUGraphNewNode(AudioGraph, &cd, 0, NULL, &OutputNode);
   AUGraphGetNodeInfo(AudioGraph, OutputNode, 0, 0, 0, &OutputUnit);
 
+  /*Mixer Node*/
   AUNode MixerNode;
   AudioUnit MixerUnit;
-
   cd.componentManufacturer = kAudioUnitManufacturer_Apple;
   cd.componentFlags = 0;
   cd.componentFlagsMask = 0;
@@ -217,6 +219,24 @@ int main(int argc, char *argv[])
 
   AUGraphConnectNodeInput(AudioGraph, MixerNode, 0, OutputNode, 0);
 
+  /*Distortion Node*/
+  AUNode FXNode;
+  AudioUnit FXUnit;
+  cd.componentManufacturer = 'appl';
+  cd.componentFlags = 0;
+  cd.componentFlagsMask = 0;
+  cd.componentType = 'aufx';
+  cd.componentSubType = 'dist';
+  AUGraphNewNode(AudioGraph, &cd, 0, NULL, &FXNode);
+  AudioUnitSetParameter(FXUnit, kDistortionParam_Delay, kAudioUnitScope_Global, 0, 512, 0);
+  AudioUnitSetParameter(FXUnit, kDistortionParam_Decay, kAudioUnitScope_Global, 0, 128, 0);
+  AudioUnitSetParameter(FXUnit, kDistortionParam_DelayMix, kAudioUnitScope_Global, 0, 128, 0);
+  AudioUnitSetParameter(FXUnit, kDistortionParam_SoftClipGain, kAudioUnitScope_Global, 0, 128, 0);
+  AUGraphGetNodeInfo(AudioGraph, FXNode, 0, 0, 0, &FXUnit);
+  AUGraphConnectNodeInput(AudioGraph, FXNode, 0, MixerNode, 0);
+
+
+  /*Synth Node*/
   AUGraphOpen(AudioGraph);
   AUGraphInitialize(AudioGraph);
   AUGraphStart(AudioGraph);
@@ -233,10 +253,11 @@ int main(int argc, char *argv[])
   AUGraphNewNode(AudioGraph, &cd, 0, NULL, &SynthNode);
   AUGraphGetNodeInfo(AudioGraph, SynthNode, 0, 0, 0, &SynthUnit);
 
-  AUGraphConnectNodeInput(AudioGraph, SynthNode, 0, MixerNode, 0);
+  AUGraphConnectNodeInput(AudioGraph, SynthNode, 0, FXNode, 0);
 
   AUGraphUpdate(AudioGraph, NULL);
- 
+
+  /*Show the graph state*/ 
   CAShow(AudioGraph);
  
   int drd = rand() % 128; 
@@ -246,7 +267,8 @@ int main(int argc, char *argv[])
   MusicDeviceMIDIEvent(SynthUnit, kMIDICtrl, 91, 0, 0);
 
   CGEventMask mask = CGEventMaskBit(kCGEventKeyDown) |
-                     CGEventMaskBit(kCGEventKeyUp);
+                     CGEventMaskBit(kCGEventKeyUp) | 
+                     CGEventMaskBit(kCGEventMouseMoved);
 
   CFMachPortRef r = CGEventTapCreate( kCGSessionEventTap, 
                                       kCGHeadInsertEventTap, 
