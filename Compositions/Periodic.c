@@ -1,13 +1,19 @@
 #include <CoreAudio/CoreAudio.h>
+#include <CoreFoundation/CFURL.h>
+#include <CoreFoundation/CFBundle.h>
 #include <AudioToolbox/AudioToolbox.h>
+#include <AudioToolbox/ExtendedAudioFile.h>
 #include <ApplicationServices/ApplicationServices.h>
+#include "CAAudioUnitOutputCapturer.h"
+#include <pthread.h>
 #include <time.h>
 
 int NUM_SYNTHS;
 int doMouse;
 AUNode *SynthNodes;
 AudioUnit *SynthUnits;
-
+AudioUnit OutputUnit;
+CAAudioUnitOutputCapturer *captor;
 
 AUGraph AudioGraph;
 enum {
@@ -98,6 +104,8 @@ CGEventRef keyPressed(
 
     if( keycode == kKeyboardQKey && type == kCGEventKeyDown ){
 
+      captor->Stop();
+      captor->Close();
       exit(0);
 
     }
@@ -137,8 +145,8 @@ int main(int argc, char *argv[])
   }else{
     NUM_SYNTHS = 8;
   }
-  SynthNodes = malloc(sizeof(AUNode) * NUM_SYNTHS);
-  SynthUnits = malloc(sizeof(AudioUnit) * NUM_SYNTHS);
+  SynthNodes = (AUNode *)malloc(sizeof(AUNode) * NUM_SYNTHS);
+  SynthUnits = (AudioUnit*)malloc(sizeof(AudioUnit) * NUM_SYNTHS);
 
   if( argc > 2 ){
     doMouse = 1;
@@ -157,9 +165,8 @@ int main(int argc, char *argv[])
   NewAUGraph(&AudioGraph);
 
   /*Output Node*/
-  AudioComponentDescription cd;
+  ComponentDescription cd;
   AUNode OutputNode;
-  AudioUnit OutputUnit;
 
   cd.componentManufacturer = kAudioUnitManufacturer_Apple;
   cd.componentFlags = 0;
@@ -170,21 +177,9 @@ int main(int argc, char *argv[])
   AUGraphNewNode(AudioGraph, &cd, 0, NULL, &OutputNode);
   AUGraphGetNodeInfo(AudioGraph, OutputNode, 0, 0, 0, &OutputUnit);
 
-  /*Mixer Node*/
-  AUNode MixerNode;
-  AudioUnit MixerUnit;
-  cd.componentManufacturer = kAudioUnitManufacturer_Apple;
-  cd.componentFlags = 0;
-  cd.componentFlagsMask = 0;
-  cd.componentType = kAudioUnitType_Mixer;
-  cd.componentSubType = kAudioUnitSubType_StereoMixer;
-
-  AUGraphNewNode(AudioGraph, &cd, 0, NULL, &MixerNode);
-  AUGraphGetNodeInfo(AudioGraph, MixerNode, 0, 0, 0, &MixerUnit);
-
-  AUGraphConnectNodeInput(AudioGraph, MixerNode, 0, OutputNode, 0);
 
   /*Distortion Node*/
+//aufc defr appl
   AUNode FXNode;
   AudioUnit FXUnit;
   cd.componentManufacturer = 'appl';
@@ -198,8 +193,21 @@ int main(int argc, char *argv[])
   AudioUnitSetParameter(FXUnit, kDistortionParam_DelayMix, kAudioUnitScope_Global, 0, 128, 0);
   AudioUnitSetParameter(FXUnit, kDistortionParam_SoftClipGain, kAudioUnitScope_Global, 0, 128, 0);
   AUGraphGetNodeInfo(AudioGraph, FXNode, 0, 0, 0, &FXUnit);
-  //AUGraphConnectNodeInput(AudioGraph, FXNode, 0, MixerNode, 0);
+  AUGraphConnectNodeInput(AudioGraph, FXNode, 0, OutputNode, 0);
 
+  /*Mixer Node*/
+  AUNode MixerNode;
+  AudioUnit MixerUnit;
+  cd.componentManufacturer = kAudioUnitManufacturer_Apple;
+  cd.componentFlags = 0;
+  cd.componentFlagsMask = 0;
+  cd.componentType = kAudioUnitType_Mixer;
+  cd.componentSubType = kAudioUnitSubType_StereoMixer;
+
+  AUGraphNewNode(AudioGraph, &cd, 0, NULL, &MixerNode);
+  AUGraphGetNodeInfo(AudioGraph, MixerNode, 0, 0, 0, &MixerUnit);
+
+  AUGraphConnectNodeInput(AudioGraph, MixerNode, 0, FXNode, 0);
 
 
   for(int i = 0; i < NUM_SYNTHS; i++ ){
@@ -250,6 +258,27 @@ int main(int argc, char *argv[])
   }
 
   //MusicDeviceMIDIEvent(SynthUnit, kMIDICtrl, 91, 0, 0);
+
+
+  //CFURL fileurl = CFURLCreateWithFileSystemPath(NULL, CFSTR("recording.caf"), kCFURLPOSIXPathStyle, false);
+    AudioDeviceID device;		// the default device
+    AudioStreamBasicDescription anASBD;	// info about the default device
+
+    anASBD.mFormatID = kAudioFormatLinearPCM;
+    anASBD.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsBigEndian | kAudioFormatFlagIsPacked;
+    anASBD.mSampleRate = 44100;
+    anASBD.mChannelsPerFrame = 2;
+    anASBD.mFramesPerPacket = 1;
+    anASBD.mBytesPerPacket = anASBD.mChannelsPerFrame * sizeof (SInt16);
+    anASBD.mBytesPerFrame = anASBD.mChannelsPerFrame * sizeof (SInt16);
+    anASBD.mBitsPerChannel = 16;
+
+    CFURLRef fileurl = CFURLCreateWithFileSystemPath(NULL, CFSTR("recording.caf"), kCFURLPOSIXPathStyle, false);
+    captor = new CAAudioUnitOutputCapturer(OutputUnit, fileurl, 'caff', anASBD);
+    fprintf(stderr,"%p\n",OutputUnit);
+    captor->Start();
+    int err = AudioUnitAddRenderNotify(MixerUnit, CAAudioUnitOutputCapturer::RenderCallback, captor);
+    fprintf(stderr,"%lx\n",err);
 
   CGEventMask mask = CGEventMaskBit(kCGEventKeyDown) |
                      CGEventMaskBit(kCGEventKeyUp) | 
