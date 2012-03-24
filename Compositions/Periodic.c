@@ -9,6 +9,8 @@
 #include <time.h>
 
 int NUM_SYNTHS;
+int g_level;
+int cur_level;
 int doMouse;
 AUNode *SynthNodes;
 AudioUnit *SynthUnits;
@@ -75,7 +77,7 @@ CGEventRef keyPressed(
    CGEventRef event,
    void *refcon
 ){
-    AudioUnit *SUs= (AudioUnit *)refcon;
+    AudioUnit *SUs = (AudioUnit *)refcon;
     
     if((type == kCGEventMouseMoved)){  
       CGPoint cursor = CGEventGetLocation(event);
@@ -128,11 +130,115 @@ void * periodic_play(void *p){
 
   playParams *pps = (playParams*)p;
   while(1){
-    fprintf(stderr,"Synth %d: Voice %d\n",pps->id,pps->tone);
     MusicDeviceMIDIEvent(SynthUnits[pps->id], kMIDINoteOn, pps->tone, 127, 0);
     usleep( pps->duration ); 
     MusicDeviceMIDIEvent(SynthUnits[pps->id], kMIDINoteOff, pps->tone, 127, 0);
     usleep( pps->period); 
+  }
+   
+}
+
+
+typedef struct _sequenceParams{
+
+  int id;
+
+  int numSegments;
+
+  unsigned long *period;
+  unsigned long *duration;
+  unsigned *tone;
+  unsigned *target;
+  
+} sequenceParams;
+
+sequenceParams *newSeq(int num){
+
+  sequenceParams *n = (sequenceParams *)malloc( sizeof(sequenceParams) ); 
+  n->period = (unsigned long *)malloc( num  * sizeof(unsigned long) );
+  n->duration = (unsigned long *)malloc( num  * sizeof(unsigned long) );
+  n->tone = (unsigned *)malloc( num  * sizeof(unsigned) );
+  n->target = (unsigned *)malloc( num  * sizeof(unsigned) );
+  n->numSegments = num; 
+  return n;
+
+}
+
+void * sequence_play(void *p){
+
+  sequenceParams *pps = (sequenceParams *)p;
+  while(1){
+  
+    int error = 0;
+    for(int i = 0; i < pps->numSegments; i++){
+
+      if( i == 0 ){
+        fprintf(stderr,"Round\n");
+      }
+
+   
+      if( pps->id >= NUM_SYNTHS/2 ){ 
+
+      MusicDeviceMIDIEvent(SynthUnits[pps->id], kMIDINoteOn, pps->tone[i], g_level, 0);
+      usleep( pps->duration[i] ); 
+
+      MusicDeviceMIDIEvent(SynthUnits[pps->id], kMIDINoteOff, pps->tone[i], g_level, 0);
+      usleep( pps->period[i] ); 
+
+      continue;
+      } 
+
+      MusicDeviceMIDIEvent(SynthUnits[pps->id], kMIDINoteOn, pps->tone[i], cur_level, 0);
+      usleep( pps->duration[i] ); 
+
+      MusicDeviceMIDIEvent(SynthUnits[pps->id], kMIDINoteOff, pps->tone[i], cur_level, 0);
+      usleep( pps->period[i] ); 
+
+
+      if( pps->tone[i] > pps->target[i] ){
+
+
+
+
+        error += (pps->tone[i] - pps->target[i]); 
+        if( rand() % 10 < 9 ){
+          /*go lower - what should happen*/
+          pps->tone[i] -= rand() % 3;
+         
+        }else{
+          /*go higher - what shouldn't happen*/
+          pps->tone[i] += 1;
+        }
+      }else if(pps->tone[i] < pps->target[i]){
+        error += (pps->target[i] - pps->tone[i]); 
+        if( rand() % 10 < 9 ){
+
+          /*go higher- what should happen*/
+          pps->tone[i] += rand() % 3;
+
+        }else{
+
+          /*go lower - what shouldn't happen*/
+          pps->tone[i] -= 1;
+
+        }
+
+      }else{
+/*
+        if( rand() % 10 > 9 ){
+          pps->tone[i] += 1;
+        }
+*/
+
+      }
+
+    }
+
+    if( pps->id < NUM_SYNTHS/2 ){   
+      fprintf(stderr,"Error: %d\n",error);
+      if( cur_level < g_level ){ cur_level += 10;  if(cur_level > g_level){ cur_level = g_level; }}
+    }
+
   }
    
 }
@@ -149,10 +255,12 @@ int main(int argc, char *argv[])
   SynthUnits = (AudioUnit*)malloc(sizeof(AudioUnit) * NUM_SYNTHS);
 
   if( argc > 2 ){
-    doMouse = 1;
+    g_level = atoi(argv[2]);
   }else{
-    doMouse = 0;
+    g_level = 64;
   }
+
+  cur_level = g_level / 4;
 
   srand(time(NULL));
   int i;
@@ -236,49 +344,118 @@ int main(int argc, char *argv[])
     CAShow(AudioGraph);
 
   }
-  
-  /*Show the graph state*/ 
+
 
   pthread_t sources[NUM_SYNTHS];
   int instruments[NUM_SYNTHS]; 
   for(int i = 0; i < NUM_SYNTHS; i++){
 
-    playParams *p = (playParams*)malloc(sizeof(playParams));
-    p->id = i;
-    p->tone = 0x25 + (rand() % 12);
-    p->period =  (10000 + (rand() % 990000));
-    p->duration =  (10000 + (rand() % 990000));
+    //playParams *p = (playParams*)malloc(sizeof(playParams));
+    int numsegs;
+    if( i < (NUM_SYNTHS/2) ){ 
+      numsegs = 12;// + (rand() % 128); 
+    }else{
+      numsegs = 12 + (rand() % 32); 
+    }
+
+    sequenceParams *s = newSeq( numsegs ); 
+    s->id = i;
+  
+    for( int j = 0; j < numsegs; j++ ){
+
+      //s->period[i] =  (100000 + (rand() % 2000000));
+
+      if( i < (NUM_SYNTHS/2) ){
+
+        s->target[j] = 0x20 + j;
+        s->tone[j] = 0x25 + (rand() % 36);
+
+        if( j == 0 ){ 
+
+          s->period[j] =  400000;//(10000 + (rand() % 1000000));
+          s->duration[j] =  400000;//(10000 + (rand() % 1000000));
+
+        }else{
+
+
+          if( rand() % 2 ){
+            if( rand() % 2 ){
+              s->period[j] = s->period[j-1] * 2;
+            }else{
+              s->period[j] = s->period[j-1] / 2;
+            }
+          }else{
+            s->period[j] = s->period[j-1];
+          }
+
+          if( rand() % 2 ){
+            if( rand() % 2 && s->duration[j] <= 1000000){
+              s->duration[j] = s->duration[j-1] * 2;
+            }else{
+              s->duration[j] = s->duration[j-1] / 2;
+            }
+          }else{
+            s->duration[j] = s->duration[j-1];
+          }
+            
+        }
+        s->period[j] =  200000;//(10000 + (rand() % 1000000));
+        s->duration[j] =  200000;//(10000 + (rand() % 1000000));
+
+      }else{
+
+        s->tone[j] = 0x25 + (rand() % 16);
+        s->period[j] =  (10000 + (rand() % 20000));
+        s->duration[j] =  (10000 + (rand() % 20000));
+
+      }
+    
+
+    }
+      
+    if( i < (NUM_SYNTHS/2) ){
+
+      instruments[i] = 12;
+
+    }else{
+
+      instruments[i] = 116;
+
+    }
 
     //instruments[i] = 100 + (rand() % 28); 
-    instruments[i] = 85 + (rand() % 43); 
-    fprintf(stderr,"Synth %d: Voice %d\n",i,instruments[i]);
+    //instruments[i] = 112;//85 + (rand() % 43); 
+
+    //instruments[i] = rand() % 2 == 0 ? 112 : 117;
+    //if( rand() % 2 ){ instruments[i] = 112; }
+    //fprintf(stderr,"Synth %d: Voice %d\n",i,instruments[i]);
+    //MusicDeviceMIDIEvent(SynthUnits[i], kMIDICtrl, 91, 0, 0);
     MusicDeviceMIDIEvent(SynthUnits[i], 0xC0, instruments[i], 0, 0);
-    pthread_create( &sources[i], NULL, periodic_play, (void *)p );
+    pthread_create( &sources[i], NULL, sequence_play, (void *)s );
     
   }
 
-  //MusicDeviceMIDIEvent(SynthUnit, kMIDICtrl, 91, 0, 0);
 
 
   //CFURL fileurl = CFURLCreateWithFileSystemPath(NULL, CFSTR("recording.caf"), kCFURLPOSIXPathStyle, false);
-    AudioDeviceID device;		// the default device
-    AudioStreamBasicDescription anASBD;	// info about the default device
+  AudioDeviceID device;		// the default device
+  AudioStreamBasicDescription anASBD;	// info about the default device
 
-    anASBD.mFormatID = kAudioFormatLinearPCM;
-    anASBD.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsBigEndian | kAudioFormatFlagIsPacked;
-    anASBD.mSampleRate = 44100;
-    anASBD.mChannelsPerFrame = 2;
-    anASBD.mFramesPerPacket = 1;
-    anASBD.mBytesPerPacket = anASBD.mChannelsPerFrame * sizeof (SInt16);
-    anASBD.mBytesPerFrame = anASBD.mChannelsPerFrame * sizeof (SInt16);
-    anASBD.mBitsPerChannel = 16;
-
-    CFURLRef fileurl = CFURLCreateWithFileSystemPath(NULL, CFSTR("recording.caf"), kCFURLPOSIXPathStyle, false);
-    captor = new CAAudioUnitOutputCapturer(OutputUnit, fileurl, 'caff', anASBD);
-    fprintf(stderr,"%p\n",OutputUnit);
-    captor->Start();
-    int err = AudioUnitAddRenderNotify(MixerUnit, CAAudioUnitOutputCapturer::RenderCallback, captor);
-    fprintf(stderr,"%lx\n",err);
+  anASBD.mFormatID = kAudioFormatLinearPCM;
+  anASBD.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsBigEndian | kAudioFormatFlagIsPacked;
+  anASBD.mSampleRate = 44100;
+  anASBD.mChannelsPerFrame = 2;
+  anASBD.mFramesPerPacket = 1;
+  anASBD.mBytesPerPacket = anASBD.mChannelsPerFrame * sizeof (SInt16);
+  anASBD.mBytesPerFrame = anASBD.mChannelsPerFrame * sizeof (SInt16);
+  anASBD.mBitsPerChannel = 16;
+ 
+  CFURLRef fileurl = CFURLCreateWithFileSystemPath(NULL, CFSTR("recording.caf"), kCFURLPOSIXPathStyle, false);
+  captor = new CAAudioUnitOutputCapturer(OutputUnit, fileurl, 'caff', anASBD);
+  fprintf(stderr,"%p\n",OutputUnit);
+  captor->Start();
+  int err = AudioUnitAddRenderNotify(MixerUnit, CAAudioUnitOutputCapturer::RenderCallback, captor);
+  fprintf(stderr,"%lx\n",err);
 
   CGEventMask mask = CGEventMaskBit(kCGEventKeyDown) |
                      CGEventMaskBit(kCGEventKeyUp) | 

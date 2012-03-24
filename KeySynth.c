@@ -233,7 +233,7 @@ int main(int argc, char *argv[])
   AudioUnitSetParameter(FXUnit, kDistortionParam_DelayMix, kAudioUnitScope_Global, 0, 128, 0);
   AudioUnitSetParameter(FXUnit, kDistortionParam_SoftClipGain, kAudioUnitScope_Global, 0, 128, 0);
   AUGraphGetNodeInfo(AudioGraph, FXNode, 0, 0, 0, &FXUnit);
-  AUGraphConnectNodeInput(AudioGraph, FXNode, 0, MixerNode, 0);
+  //AUGraphConnectNodeInput(AudioGraph, FXNode, 0, MixerNode, 0);
 
 
   /*Synth Node*/
@@ -253,7 +253,7 @@ int main(int argc, char *argv[])
   AUGraphNewNode(AudioGraph, &cd, 0, NULL, &SynthNode);
   AUGraphGetNodeInfo(AudioGraph, SynthNode, 0, 0, 0, &SynthUnit);
 
-  AUGraphConnectNodeInput(AudioGraph, SynthNode, 0, FXNode, 0);
+  AUGraphConnectNodeInput(AudioGraph, SynthNode, 0, MixerNode, 0);
 
   AUGraphUpdate(AudioGraph, NULL);
 

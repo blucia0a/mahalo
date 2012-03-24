@@ -15,6 +15,7 @@ SampleMixer::SampleMixer(){
   numSources = 0;
   srcs = (SampleSource **)malloc(sizeof(SampleSource *) * MIXER_MAX_SRCS);
   memset(srcs,0,sizeof(SampleSource *) * MIXER_MAX_SRCS);
+  this->amp = 1.0;
    
 }
 
@@ -30,10 +31,18 @@ void SampleMixer::Mix(int numSources, SampleSource **srcs, float *out){
 	}
 	out[0] /= (float)numSources;
 	out[1] /= (float)numSources;
+
+        out[0] *= this->amp;
+        out[1] *= this->amp;
+
 }
 
 void SampleMixer::getNextSample(float *out){
   this->Mix(this->numSources,this->srcs,out);
+}
+
+void SampleMixer::setAmpVal(float newamp){
+  this->amp = newamp;
 }
 
 bool SampleMixer::Add(SampleSource *s){

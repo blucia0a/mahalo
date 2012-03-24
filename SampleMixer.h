@@ -15,11 +15,13 @@ class SampleMixer : public SampleSource{
 
         unsigned numSources;
         SampleSource **srcs;
+        float amp;
 public:
         SampleMixer();
         bool Add(SampleSource *s);
         SampleSource *Remove(unsigned i);
 	void Mix(int numSources, SampleSource **srcs, float *out);
         void getNextSample(float *out);
+        void setAmpVal(float newamp);
 };
 #endif

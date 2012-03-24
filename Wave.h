@@ -19,7 +19,7 @@ class Wave : public SampleSource{
 
 public:	
   Wave(double frq, double rate, double ampl);
-  void setAmpVal(double val);
+  void setAmpVal(float val);
   double getAmpVal();
   void setFreqVal(double val);
   double getFreqVal();

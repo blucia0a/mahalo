@@ -53,7 +53,7 @@ void Wave::getNextSample(float *out){
 
 }
 
-void Wave::setAmpVal(double val){
+void Wave::setAmpVal(float val){
     this->amp = val;
 }
 

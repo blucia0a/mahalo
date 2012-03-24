@@ -1,9 +1,12 @@
-SRCS= SampleMixer.cpp Mahalo.cpp Wave.cpp Noiser.cpp FilePlayer.cpp
+SRCS= SampleMixer.cpp Mahalo.cpp Wave.cpp BeatWave.cpp Noiser.cpp FilePlayer.cpp
 
 all:
-	g++ -Wno-deprecated-declarations -shared -fPIC $(SRCS) -o libmahalo.so -framework CoreAudio  
+	g++ -m32 -march=i386 -Wno-deprecated-declarations -shared -fPIC $(SRCS) -o libmahalo.so -framework CoreAudio  
 
-keysynth:
+beatwavetest: BeatWaveTest.cpp BeatWave.cpp BeatWave.h
+	g++  -m32 -march=i386 BeatWaveTest.cpp -o BeatWaveTest -L. -lmahalo -framework CoreAudio
+
+keysynth: KeySynth.c
 	gcc KeySynth.c -o KeySynth -framework CoreAudio -framework ApplicationServices -framework CoreMidi -framework AudioToolbox -framework AudioUnit
 test:
 	g++ CoreMidiTest.cpp -o CoreMidiTest -framework CoreAudio -framework ApplicationServices -framework CoreMidi -framework AudioToolbox -framework AudioUnit

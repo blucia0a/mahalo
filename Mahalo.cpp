@@ -16,11 +16,17 @@ OSStatus sappIOProc (AudioDeviceID  inDevice, const AudioTimeStamp*  inNow, cons
     int i;
     
     int numSamples = def->deviceBufferSize / def->deviceFormat.mBytesPerFrame;
+    
     float *out = (float*)outOutputData->mBuffers[0].mData;
     
     for (i=0; i<numSamples; ++i) {
         
-      def->src->getNextSample(out);
+      if( def->src != NULL ){
+        def->src->getNextSample(out);
+      }else{
+        out[0] = 0;
+        out[1] = 0;
+      }
       
       out[0] = out[0] * (1.0 - def->panz);
       out[1] = out[1] * def->panz;

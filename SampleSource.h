@@ -12,5 +12,6 @@
 class SampleSource{
 public:
   virtual void getNextSample(float *out) = 0;
+  virtual void setAmpVal(float newamp) = 0;
 };
 #endif
